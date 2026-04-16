@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gas System Control Panel</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&family=Rajdhani:wght@500;700&display=swap');
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background: radial-gradient(circle at center, #111 0%, #000 100%);
+            color: #ccc;
+            font-family: 'Rajdhani', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        .panel {
+            background: rgba(10, 15, 25, 0.85);
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 12px;
+            padding: 40px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.1), inset 0 0 15px rgba(0, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            text-align: center;
+            position: relative;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, #0ff, transparent);
+        }
+
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: #0ff;
+            margin-top: 0;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        .status-box {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+
+        .current-mode {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 22px;
+            color: #fff;
+            margin: 5px 0 15px 0;
+        }
+
+        .val-display {
+            font-family: 'Orbitron', monospace;
+            font-size: 48px;
+            font-weight: 700;
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+
+        .val-display.safe {
+            color: #0f0;
+            text-shadow: 0 0 15px rgba(0, 255, 0, 0.6);
+        }
+
+        .val-display.warning {
+            color: #ff0;
+            text-shadow: 0 0 15px rgba(255, 255, 0, 0.6);
+        }
+
+        .val-display.danger {
+            color: #f00;
+            text-shadow: 0 0 15px rgba(255, 0, 0, 0.6);
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        button {
+            background: rgba(255, 255, 255, 0.02);
+            color: #fff;
+            border: 1px solid #444;
+            padding: 15px;
+            font-size: 16px;
+            font-family: 'Orbitron', sans-serif;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-safe {
+            border-color: #0f0;
+            color: #0f0;
+        }
+
+        .btn-warn {
+            border-color: #ff0;
+            color: #ff0;
+        }
+
+        .btn-danger {
+            border-color: #f00;
+            color: #f00;
+        }
+
+        .btn-auto {
+            border-color: #0ff;
+            color: #0ff;
+        }
+
+        .token-group {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #444;
+            display: none;
+        }
+
+        .token-group.active {
+            display: block;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid #0ff;
+            color: #0ff;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="panel">
+        <h1>Gas System Control</h1>
+
+        <div class="status-box">
+            <div style="color: #888;">Current Mode</div>
+            <div class="current-mode" id="modeDisplay">Normal</div>
+            <div style="color: #888;">Gas Value</div>
+            <div class="val-display safe" id="valDisplay">100</div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-safe" onclick="setMode('Normal', 100)">Normal Mode</button>
+            <button class="btn-warn" onclick="setMode('Warning', 250)">Warning Mode</button>
+            <button class="btn-danger" onclick="setMode('Gas Leak', 750)">Simulate Gas Leak</button>
+            <button class="btn-auto" onclick="toggleAuto()">Auto Mode (Blynk API)</button>
+        </div>
+
+        <div class="token-group" id="blynkControls">
+            <input type="text" id="blynkToken" placeholder="Enter Blynk Token" value="YOUR_TOKEN">
+            <button class="btn-auto" onclick="startAuto()">Start Fetching</button>
+            <div id="autoStatus" style="color: #888; font-size: 14px; margin-top: 5px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let autoInterval = null;
+
+        function setMode(mode, value) {
+            stopAuto();
+            updateAndBroadcast(mode, value);
+        }
+
+        function getEnvironmentData(gasValue) {
+            let valRatio = Math.min(gasValue / 1000, 1);
+            let baseTemp = 22 + (valRatio * 15);
+            let baseHum = 45 - (valRatio * 20);
+            return {
+                temp: (baseTemp + (Math.random() * 2 - 1)).toFixed(1),
+                humidity: (baseHum + (Math.random() * 4 - 2)).toFixed(1)
+            };
+        }
+
+        function updateAndBroadcast(mode, value) {
+            document.getElementById('modeDisplay').innerText = mode;
+            const valEl = document.getElementById('valDisplay');
+            valEl.innerText = value;
+            valEl.className = 'val-display';
+            if (value < 200) valEl.classList.add('safe');
+            else if (value < 400) valEl.classList.add('warning');
+            else valEl.classList.add('danger');
+
+            const env = getEnvironmentData(value);
+            localStorage.setItem('gasSystemData', JSON.stringify({ mode: mode, value: value, temp: env.temp, humidity: env.humidity, timestamp: Date.now() }));
+        }
+
+        function toggleAuto() { document.getElementById('blynkControls').classList.toggle('active'); }
+
+        function startAuto() {
+            const token = document.getElementById('blynkToken').value;
+            if (!token) return alert('Enter token');
+
+            document.getElementById('modeDisplay').innerText = 'Auto (Blynk)';
+            document.getElementById('autoStatus').innerText = 'Fetching data...';
+
+            if (autoInterval) clearInterval(autoInterval);
+
+            autoInterval = setInterval(() => {
+                if (token === 'YOUR_TOKEN' || token === '') {
+                    let base = 100 + Math.floor(Math.random() * 50);
+                    updateAndBroadcast('Auto (Simulated API)', base);
+                } else {
+                    fetch(`https://blynk.cloud/external/api/get?token=${token}&V0`)
+                        .then(res => res.text())
+                        .then(data => {
+                            let val = parseFloat(data);
+                            if (!isNaN(val)) updateAndBroadcast('Auto (Blynk API)', val);
+                            document.getElementById('autoStatus').innerText = 'Live API connected';
+                        });
+                }
+            }, 2000);
+        }
+
+        function stopAuto() {
+            if (autoInterval) clearInterval(autoInterval);
+            autoInterval = null;
+            document.getElementById('autoStatus').innerText = '';
+            document.getElementById('blynkControls').classList.remove('active');
+        }
+
+        window.onload = () => setMode('Normal', 100);
+    </script>
+
+</body>
+
+</html>
