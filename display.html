@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Gas Safety Monitoring</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
         
@@ -146,6 +147,11 @@
         <div style="height: 240px;"><canvas id="gasChart"></canvas></div>
     </div>
 
+    <!-- Navigation Link -->
+    <div style="grid-column: 1 / -1; text-align: center; margin-top: 20px; margin-bottom: 20px;">
+        <button class="startup-btn" onclick="window.open('controller.html', '_blank')" style="font-size: 1.1rem; padding: 10px 25px;">Open Control Panel 🎛️</button>
+    </div>
+
 </div>
 
 <script>
@@ -284,6 +290,25 @@
 
     window.addEventListener('storage', (e) => {
         if(e.key === 'gasSystemData' && e.newValue) handleNewData(JSON.parse(e.newValue));
+    });
+
+    // MQTT Implementation
+    const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+    const mqttTopic = 'iot_proj_gas_system_sync_8f92a3';
+
+    mqttClient.on('connect', () => {
+        console.log('Display connected to MQTT broker');
+        mqttClient.subscribe(mqttTopic);
+    });
+
+    mqttClient.on('message', (topic, message) => {
+        if (topic === mqttTopic) {
+            try {
+                handleNewData(JSON.parse(message.toString()));
+            } catch (err) {
+                console.error("Failed to parse MQTT message", err);
+            }
+        }
     });
 </script>
 </body>
