@@ -8,70 +8,158 @@
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
-        
-        :root { --bg-color: #050508; --safe-color: #00ff00; --warn-color: #ffff00; --danger-color: #ff0000; --text-color: #d0e0ff; --panel-bg: rgba(10, 20, 35, 0.7); }
-        
+        :root {
+            --bg-color: #050508;
+            --safe-color: #00ff00;
+            --warn-color: #ffff00;
+            --danger-color: #ff0000;
+            --text-color: #d0e0ff;
+            --panel-bg: rgba(10, 20, 35, 0.7);
+        }
         * { box-sizing: border-box; }
-        body { background: var(--bg-color); color: var(--text-color); font-family: 'Rajdhani', sans-serif; margin: 0; padding: 20px; transition: background 0.3s; }
+        body {
+            background: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Rajdhani', sans-serif;
+            margin: 0; padding: 20px;
+            transition: background 0.3s;
+        }
         body.pulse-danger { animation: bgFlash 1s infinite alternate; }
         @keyframes bgFlash { from { background: #050508; } to { background: #3a0000; } }
-
         .header { text-align: center; margin-bottom: 20px; }
-        h1 { font-family: 'Orbitron', sans-serif; color: #00ffff; text-transform: uppercase; letter-spacing: 3px; margin: 0; font-size: 2.2rem; }
+        h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: #00ffff; text-transform: uppercase;
+            letter-spacing: 3px; margin: 0; font-size: 2.2rem;
+        }
         .subtitle { color: #88aadd; font-size: 1.2rem; letter-spacing: 5px; text-transform: uppercase; }
-
-        .grid-container { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-gap: 20px; max-width: 1400px; margin: 0 auto; }
-        
-        .panel { background: var(--panel-bg); border: 1px solid rgba(0, 255, 255, 0.1); border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; }
-        .panel::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #00ffff; }
-
-        .primary-data { text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; grid-column: span 1; }
-        .gas-value { font-family: 'Orbitron', monospace; font-size: 5rem; font-weight: 900; line-height: 1; margin: 15px 0; }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            grid-gap: 20px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid rgba(0,255,255,0.1);
+            border-radius: 15px; padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            position: relative;
+        }
+        .panel::before {
+            content: ''; position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: #00ffff;
+        }
+        .primary-data {
+            text-align: center; display: flex;
+            flex-direction: column; justify-content: center;
+            align-items: center; grid-column: span 1;
+        }
+        .gas-value {
+            font-family: 'Orbitron', monospace;
+            font-size: 5rem; font-weight: 900;
+            line-height: 1; margin: 15px 0;
+        }
         .status-text { font-size: 1.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
-
-        .led-indicator { width: 30px; height: 30px; border-radius: 50%; margin: 15px auto; position: relative; }
-        .led-indicator::after { content: ''; position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; border-radius: 50%; border: 2px solid; opacity: 0.5; animation: ripple 1.5s infinite linear; }
+        .led-indicator {
+            width: 30px; height: 30px; border-radius: 50%;
+            margin: 15px auto; position: relative;
+        }
+        .led-indicator::after {
+            content: ''; position: absolute;
+            top: -10px; left: -10px; right: -10px; bottom: -10px;
+            border-radius: 50%; border: 2px solid; opacity: 0.5;
+            animation: ripple 1.5s infinite linear;
+        }
         @keyframes ripple { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
-
-        .alert-bar { background: rgba(255,0,0,0.1); border: 1px solid rgba(255,0,0,0.5); color: #ff5555; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; margin-top: 15px; display: none; text-transform: uppercase; width: 100%; }
+        .alert-bar {
+            background: rgba(255,0,0,0.1);
+            border: 1px solid rgba(255,0,0,0.5);
+            color: #ff5555; padding: 15px;
+            font-size: 1.2rem; font-weight: bold;
+            border-radius: 8px; margin-top: 15px;
+            display: none; text-transform: uppercase; width: 100%;
+        }
         .alert-bar.active { display: block; animation: alertBlink 1s infinite; }
         @keyframes alertBlink { 50% { opacity: 0.5; } }
-
-        /* State colors */
         .state-safe .gas-value { color: var(--safe-color); text-shadow: 0 0 30px rgba(0,255,0,0.7); }
         .state-safe .status-text { color: var(--safe-color); }
         .state-safe .led-indicator { background: var(--safe-color); box-shadow: 0 0 20px var(--safe-color); }
         .state-safe .led-indicator::after { border-color: var(--safe-color); }
         .state-safe.panel::before { background: var(--safe-color); }
-
         .state-warn .gas-value { color: var(--warn-color); text-shadow: 0 0 30px rgba(255,255,0,0.7); }
         .state-warn .status-text { color: var(--warn-color); }
         .state-warn .led-indicator { background: var(--warn-color); box-shadow: 0 0 20px var(--warn-color); }
         .state-warn .led-indicator::after { border-color: var(--warn-color); }
         .state-warn.panel::before { background: var(--warn-color); }
-
         .state-danger .gas-value { color: var(--danger-color); text-shadow: 0 0 40px rgba(255,0,0,0.9); }
         .state-danger .status-text { color: var(--danger-color); }
         .state-danger .led-indicator { background: var(--danger-color); box-shadow: 0 0 30px var(--danger-color); }
         .state-danger .led-indicator::after { border-color: var(--danger-color); animation: ripple 0.5s infinite linear; }
         .state-danger.panel::before { background: var(--danger-color); }
-
         .chart-container-large { grid-column: span 3; height: 300px; margin-top: 10px; }
         .gauge-container { height: 200px; display: flex; justify-content: center; align-items: center; position: relative; }
-        
         .history-list { list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; }
-        .history-list li { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; font-size: 0.9rem; }
+        .history-list li {
+            padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05);
+            display: flex; justify-content: space-between; font-size: 0.9rem;
+        }
         .history-list li span.time { color: #88aadd; }
         .history-list li.warn span.msg { color: var(--warn-color); }
         .history-list li.danger span.msg { color: var(--danger-color); }
-
-        .startup-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; display: flex; justify-content: center; align-items: center; flex-direction: column; }
-        .startup-btn { background: transparent; border: 2px solid #00ffff; color: #00ffff; padding: 15px 40px; font-size: 1.5rem; font-family: 'Orbitron', sans-serif; cursor: pointer; border-radius: 8px; text-transform: uppercase; }
+        .startup-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9); z-index: 100;
+            display: flex; justify-content: center; align-items: center; flex-direction: column;
+        }
+        .startup-btn {
+            background: transparent; border: 2px solid #00ffff;
+            color: #00ffff; padding: 15px 40px;
+            font-size: 1.5rem; font-family: 'Orbitron', sans-serif;
+            cursor: pointer; border-radius: 8px; text-transform: uppercase;
+        }
         .startup-btn:hover { background: rgba(0,255,255,0.2); transform: scale(1.05); }
-
-        .metric-block { text-align: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid #223; }
+        .metric-block {
+            text-align: center; margin: 15px 0; padding: 15px;
+            background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid #223;
+        }
         .metric-title { font-size: 0.9rem; font-family: 'Orbitron'; color: #00ffff; text-transform: uppercase; }
         .metric-val { font-size: 2rem; font-family: 'Orbitron'; color: #fff; margin-top: 5px; }
+
+        /* MQTT Status indicator */
+        .mqtt-status {
+            position: fixed; bottom: 15px; left: 15px;
+            display: flex; align-items: center; gap: 8px;
+            font-family: 'Orbitron'; font-size: 0.7rem;
+            color: #446; z-index: 50;
+        }
+        .mqtt-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #333; transition: background 0.3s;
+        }
+        .mqtt-dot.connected { background: #00ff00; box-shadow: 0 0 6px #00ff00; }
+        .mqtt-dot.error { background: #ff0000; }
+
+        /* Controller button - bottom right corner, subtle */
+        .nav-btn {
+            position: fixed; bottom: 15px; right: 15px;
+            background: rgba(0,255,255,0.05);
+            border: 1px solid rgba(0,255,255,0.15);
+            color: rgba(0,255,255,0.4);
+            font-size: 1.4rem; cursor: pointer;
+            padding: 8px 12px; border-radius: 8px;
+            z-index: 50; transition: all 0.2s;
+            font-family: 'Orbitron'; letter-spacing: 1px;
+            text-decoration: none; display: flex; align-items: center; gap: 6px;
+        }
+        .nav-btn:hover {
+            background: rgba(0,255,255,0.15);
+            color: rgba(0,255,255,0.8);
+            border-color: rgba(0,255,255,0.4);
+        }
+        .nav-btn span { font-size: 0.65rem; }
 
         @media (max-width: 1000px) { .grid-container { grid-template-columns: 1fr 1fr; } .chart-container-large { grid-column: span 2; } }
         @media (max-width: 700px) { .grid-container { grid-template-columns: 1fr; } .chart-container-large { grid-column: span 1; } }
@@ -90,7 +178,6 @@
 </div>
 
 <div class="grid-container">
-
     <!-- Primary Panel -->
     <div class="panel primary-data state-safe" id="monitorPanel">
         <div class="status-text" id="statusText">SYSTEM SAFE</div>
@@ -124,7 +211,7 @@
         </div>
     </div>
 
-    <!-- System Telemetry Panel -->
+    <!-- Telemetry Panel -->
     <div class="panel">
         <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem; text-align:center;">Telemetry Status</h2>
         <ul style="list-style: none; padding: 0; color: #ccc; line-height: 1.8;">
@@ -135,46 +222,46 @@
         </ul>
     </div>
 
-    <!-- Alarm History Panel -->
+    <!-- Alarm History -->
     <div class="panel" style="grid-column: span 2;">
         <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem;">Alert Timeline Log</h2>
         <ul class="history-list" id="historyList"></ul>
     </div>
 
-    <!-- Live Chart Panel -->
+    <!-- Live Chart -->
     <div class="panel chart-container-large">
         <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem;">Live Sensor Data Stream (PPM)</h2>
         <div style="height: 240px;"><canvas id="gasChart"></canvas></div>
     </div>
-
-    <!-- Navigation Link -->
-    <div style="grid-column: 1 / -1; text-align: center; margin-top: 20px; margin-bottom: 20px;">
-        <button class="startup-btn" onclick="window.open('controller.html', '_blank')" style="font-size: 1.1rem; padding: 10px 25px;">Open Control Panel 🎛️</button>
-    </div>
-
 </div>
 
+<!-- MQTT Status -->
+<div class="mqtt-status">
+    <div class="mqtt-dot" id="mqttDot"></div>
+    <span id="mqttLabel">CONNECTING...</span>
+</div>
+
+<!-- Controller Button - Fixed bottom right -->
+<a class="nav-btn" href="controller.html" title="Open Controller">
+    ⚙️ <span>CONTROLLER</span>
+</a>
+
 <script>
-    // --- Audio System Context ---
-    let audioCtx = null;
-    let oscillator = null;
-    let gainNode = null;
-    let isBeeping = false;
+    let audioCtx = null, oscillator = null, gainNode = null, isBeeping = false;
 
     function initializeAudio() {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         audioCtx = new AudioContext();
         oscillator = audioCtx.createOscillator();
-        oscillator.type = 'square';
-        oscillator.frequency.value = 800; 
-        gainNode = audioCtx.createGain(); gainNode.gain.value = 0; 
+        oscillator.type = 'square'; oscillator.frequency.value = 800;
+        gainNode = audioCtx.createGain(); gainNode.gain.value = 0;
         oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
         oscillator.start();
     }
 
     function toggleBuzzer(active) {
-        if(!audioCtx) return;
-        if(active && !isBeeping) {
+        if (!audioCtx) return;
+        if (active && !isBeeping) {
             gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
             let lfo = audioCtx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 4;
             let lfoGain = audioCtx.createGain(); lfoGain.gain.value = 0.5;
@@ -182,49 +269,42 @@
             lfo.start(); isBeeping = true; oscillator.lfo = lfo;
         } else if (!active && isBeeping) {
             gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-            if(oscillator.lfo) { oscillator.lfo.stop(); oscillator.lfo.disconnect(); oscillator.lfo = null; }
+            if (oscillator.lfo) { oscillator.lfo.stop(); oscillator.lfo.disconnect(); oscillator.lfo = null; }
             isBeeping = false;
         }
     }
 
-    // --- Line Chart ---
     const ctxLine = document.getElementById('gasChart').getContext('2d');
     const gasChart = new Chart(ctxLine, {
         type: 'line',
-        data: { labels: Array(30).fill(''), datasets: [{ label: 'Gas Concentration', data: Array(30).fill(0), borderColor: '#00ffff', backgroundColor: 'rgba(0, 255, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.3, pointRadius: 1 }] },
+        data: { labels: Array(30).fill(''), datasets: [{ label: 'Gas Concentration', data: Array(30).fill(0), borderColor: '#00ffff', backgroundColor: 'rgba(0,255,255,0.1)', borderWidth: 2, fill: true, tension: 0.3, pointRadius: 1 }] },
         options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1000 }, x: { display: false } }, plugins: { legend: { display: false } } }
     });
 
-    // --- Gauge Chart ---
     const ctxGauge = document.getElementById('gaugeChart').getContext('2d');
     const gaugeChart = new Chart(ctxGauge, {
         type: 'doughnut',
         data: { datasets: [{ data: [100, 900], backgroundColor: ['#00ff00', '#222'], borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '80%', plugins: { tooltip: {enabled: false} } }
+        options: { responsive: true, maintainAspectRatio: false, cutout: '80%', plugins: { tooltip: { enabled: false } } }
     });
 
-    // --- Uptime Simulator ---
     let uptimeSeconds = 0;
     setInterval(() => {
         uptimeSeconds++;
-        const h = String(Math.floor(uptimeSeconds / 3600)).padStart(2, '0');
         const m = String(Math.floor((uptimeSeconds % 3600) / 60)).padStart(2, '0');
         const s = String(uptimeSeconds % 60).padStart(2, '0');
-        document.getElementById('uptimeDisp').innerText = `${Math.floor(Math.random() * 24 + 120)}:${m}:${s}`; // fake start hours
-
-        // Randomly adjust latency display
+        document.getElementById('uptimeDisp').innerText = `${Math.floor(Math.random() * 24 + 120)}:${m}:${s}`;
         const lat = Math.floor(Math.random() * 15 + 10);
         const latEl = document.getElementById('latencyDisp');
         latEl.innerText = `${lat} ms`;
         latEl.style.color = lat > 20 ? '#ff0' : '#0f0';
     }, 1000);
 
-    // --- Logic ---
     function initializeSystem() {
         document.getElementById('startupOverlay').style.display = 'none';
         initializeAudio();
         const dataStr = localStorage.getItem('gasSystemData');
-        if(dataStr) handleNewData(JSON.parse(dataStr));
+        if (dataStr) handleNewData(JSON.parse(dataStr));
     }
 
     function addHistoryItem(msg, level) {
@@ -232,7 +312,7 @@
         const li = document.createElement('li'); li.className = level;
         li.innerHTML = `<span class="time">[${new Date().toLocaleTimeString()}]</span> <span class="msg">${msg}</span>`;
         list.prepend(li);
-        if(list.children.length > 50) list.removeChild(list.lastChild);
+        if (list.children.length > 50) list.removeChild(list.lastChild);
     }
 
     let lastState = 'safe';
@@ -240,16 +320,13 @@
     function handleNewData(data) {
         const val = Math.round(data.value);
         document.getElementById('gasValueDisplay').innerText = val;
-        
         if (data.temp) document.getElementById('tempDisplay').innerText = `${data.temp}°C`;
         if (data.humidity) document.getElementById('humDisplay').innerText = `${data.humidity}%`;
 
         const panel = document.getElementById('monitorPanel');
         let currentState = val < 200 ? 'safe' : (val < 400 ? 'warn' : 'danger');
-
         panel.className = 'panel primary-data state-' + currentState;
 
-        // Update Gauge
         let percent = Math.min((val / 1000) * 100, 100).toFixed(0);
         document.getElementById('gaugePercent').innerText = `${percent}%`;
         let gaugeColor = currentState === 'safe' ? '#0f0' : (currentState === 'warn' ? '#ff0' : '#f00');
@@ -264,18 +341,16 @@
             toggleBuzzer(true);
             gasChart.data.datasets[0].borderColor = '#ff0000';
             gasChart.data.datasets[0].backgroundColor = 'rgba(255,0,0,0.1)';
-            if(lastState !== 'danger') addHistoryItem(`Gas leak! Peak Value Confirmed: ${val} PPM`, 'danger');
-        } 
-        else if (currentState === 'warn') {
+            if (lastState !== 'danger') addHistoryItem(`Gas leak! Peak Value Confirmed: ${val} PPM`, 'danger');
+        } else if (currentState === 'warn') {
             document.body.classList.remove('pulse-danger');
             document.getElementById('alertBar').classList.remove('active');
             document.getElementById('statusText').innerText = 'WARNING: ELEVATED';
             toggleBuzzer(false);
             gasChart.data.datasets[0].borderColor = '#ffff00';
             gasChart.data.datasets[0].backgroundColor = 'rgba(255,255,0,0.1)';
-            if(lastState !== 'warn') addHistoryItem(`Elevated anomalies! Value: ${val} PPM`, 'warn');
-        }
-        else {
+            if (lastState !== 'warn') addHistoryItem(`Elevated anomalies! Value: ${val} PPM`, 'warn');
+        } else {
             document.body.classList.remove('pulse-danger');
             document.getElementById('alertBar').classList.remove('active');
             document.getElementById('statusText').innerText = 'SYSTEM SAFE';
@@ -289,25 +364,28 @@
     }
 
     window.addEventListener('storage', (e) => {
-        if(e.key === 'gasSystemData' && e.newValue) handleNewData(JSON.parse(e.newValue));
+        if (e.key === 'gasSystemData' && e.newValue) handleNewData(JSON.parse(e.newValue));
     });
 
-    // MQTT Implementation
+    // MQTT
     const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
     const mqttTopic = 'iot_proj_gas_system_sync_8f92a3';
 
     mqttClient.on('connect', () => {
-        console.log('Display connected to MQTT broker');
+        document.getElementById('mqttDot').className = 'mqtt-dot connected';
+        document.getElementById('mqttLabel').innerText = 'MQTT LIVE';
         mqttClient.subscribe(mqttTopic);
+    });
+
+    mqttClient.on('error', () => {
+        document.getElementById('mqttDot').className = 'mqtt-dot error';
+        document.getElementById('mqttLabel').innerText = 'MQTT ERROR';
     });
 
     mqttClient.on('message', (topic, message) => {
         if (topic === mqttTopic) {
-            try {
-                handleNewData(JSON.parse(message.toString()));
-            } catch (err) {
-                console.error("Failed to parse MQTT message", err);
-            }
+            try { handleNewData(JSON.parse(message.toString())); }
+            catch (err) { console.error("Failed to parse MQTT message", err); }
         }
     });
 </script>
