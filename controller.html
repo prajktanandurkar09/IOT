@@ -1,315 +1,892 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Gas Safety Monitoring</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>Gas System Controller</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap');
-        
-        :root { --bg-color: #050508; --safe-color: #00ff00; --warn-color: #ffff00; --danger-color: #ff0000; --text-color: #d0e0ff; --panel-bg: rgba(10, 20, 35, 0.7); }
-        
-        * { box-sizing: border-box; }
-        body { background: var(--bg-color); color: var(--text-color); font-family: 'Rajdhani', sans-serif; margin: 0; padding: 20px; transition: background 0.3s; }
-        body.pulse-danger { animation: bgFlash 1s infinite alternate; }
-        @keyframes bgFlash { from { background: #050508; } to { background: #3a0000; } }
 
-        .header { text-align: center; margin-bottom: 20px; }
-        h1 { font-family: 'Orbitron', sans-serif; color: #00ffff; text-transform: uppercase; letter-spacing: 3px; margin: 0; font-size: 2.2rem; }
-        .subtitle { color: #88aadd; font-size: 1.2rem; letter-spacing: 5px; text-transform: uppercase; }
-
-        .grid-container { display: grid; grid-template-columns: 1fr 1fr 1fr; grid-gap: 20px; max-width: 1400px; margin: 0 auto; }
-        
-        .panel { background: var(--panel-bg); border: 1px solid rgba(0, 255, 255, 0.1); border-radius: 15px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; }
-        .panel::before { content: ''; position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: #00ffff; }
-
-        .primary-data { text-align: center; display: flex; flex-direction: column; justify-content: center; align-items: center; grid-column: span 1; }
-        .gas-value { font-family: 'Orbitron', monospace; font-size: 5rem; font-weight: 900; line-height: 1; margin: 15px 0; }
-        .status-text { font-size: 1.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
-
-        .led-indicator { width: 30px; height: 30px; border-radius: 50%; margin: 15px auto; position: relative; }
-        .led-indicator::after { content: ''; position: absolute; top: -10px; left: -10px; right: -10px; bottom: -10px; border-radius: 50%; border: 2px solid; opacity: 0.5; animation: ripple 1.5s infinite linear; }
-        @keyframes ripple { 0% { transform: scale(0.8); opacity: 1; } 100% { transform: scale(2); opacity: 0; } }
-
-        .alert-bar { background: rgba(255,0,0,0.1); border: 1px solid rgba(255,0,0,0.5); color: #ff5555; padding: 15px; font-size: 1.2rem; font-weight: bold; border-radius: 8px; margin-top: 15px; display: none; text-transform: uppercase; width: 100%; }
-        .alert-bar.active { display: block; animation: alertBlink 1s infinite; }
-        @keyframes alertBlink { 50% { opacity: 0.5; } }
-
-        /* State colors */
-        .state-safe .gas-value { color: var(--safe-color); text-shadow: 0 0 30px rgba(0,255,0,0.7); }
-        .state-safe .status-text { color: var(--safe-color); }
-        .state-safe .led-indicator { background: var(--safe-color); box-shadow: 0 0 20px var(--safe-color); }
-        .state-safe .led-indicator::after { border-color: var(--safe-color); }
-        .state-safe.panel::before { background: var(--safe-color); }
-
-        .state-warn .gas-value { color: var(--warn-color); text-shadow: 0 0 30px rgba(255,255,0,0.7); }
-        .state-warn .status-text { color: var(--warn-color); }
-        .state-warn .led-indicator { background: var(--warn-color); box-shadow: 0 0 20px var(--warn-color); }
-        .state-warn .led-indicator::after { border-color: var(--warn-color); }
-        .state-warn.panel::before { background: var(--warn-color); }
-
-        .state-danger .gas-value { color: var(--danger-color); text-shadow: 0 0 40px rgba(255,0,0,0.9); }
-        .state-danger .status-text { color: var(--danger-color); }
-        .state-danger .led-indicator { background: var(--danger-color); box-shadow: 0 0 30px var(--danger-color); }
-        .state-danger .led-indicator::after { border-color: var(--danger-color); animation: ripple 0.5s infinite linear; }
-        .state-danger.panel::before { background: var(--danger-color); }
-
-        .chart-container-large { grid-column: span 3; height: 300px; margin-top: 10px; }
-        .gauge-container { height: 200px; display: flex; justify-content: center; align-items: center; position: relative; }
-        
-        .history-list { list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; }
-        .history-list li { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); display: flex; justify-content: space-between; font-size: 0.9rem; }
-        .history-list li span.time { color: #88aadd; }
-        .history-list li.warn span.msg { color: var(--warn-color); }
-        .history-list li.danger span.msg { color: var(--danger-color); }
-
-        .startup-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.9); z-index: 100; display: flex; justify-content: center; align-items: center; flex-direction: column; }
-        .startup-btn { background: transparent; border: 2px solid #00ffff; color: #00ffff; padding: 15px 40px; font-size: 1.5rem; font-family: 'Orbitron', sans-serif; cursor: pointer; border-radius: 8px; text-transform: uppercase; }
-        .startup-btn:hover { background: rgba(0,255,255,0.2); transform: scale(1.05); }
-
-        .metric-block { text-align: center; margin: 15px 0; padding: 15px; background: rgba(0,0,0,0.3); border-radius: 8px; border: 1px solid #223; }
-        .metric-title { font-size: 0.9rem; font-family: 'Orbitron'; color: #00ffff; text-transform: uppercase; }
-        .metric-val { font-size: 2rem; font-family: 'Orbitron'; color: #fff; margin-top: 5px; }
-
-        @media (max-width: 1000px) { .grid-container { grid-template-columns: 1fr 1fr; } .chart-container-large { grid-column: span 2; } }
-        @media (max-width: 700px) { .grid-container { grid-template-columns: 1fr; } .chart-container-large { grid-column: span 1; } }
-    </style>
-</head>
-<body>
-
-<div class="startup-overlay" id="startupOverlay">
-    <h1 style="margin-bottom: 40px;">Smart Gas Safety System</h1>
-    <button class="startup-btn" onclick="initializeSystem()">Start Dashboard</button>
-</div>
-
-<div class="header">
-    <h1>Gas Safety Monitoring Center</h1>
-    <div class="subtitle">Live Telemetry & Diagnostics</div>
-</div>
-
-<div class="grid-container">
-
-    <!-- Primary Panel -->
-    <div class="panel primary-data state-safe" id="monitorPanel">
-        <div class="status-text" id="statusText">SYSTEM SAFE</div>
-        <div class="led-indicator"></div>
-        <div class="gas-value" id="gasValueDisplay">100</div>
-        <div style="color: #666; font-size: 1rem; text-transform: uppercase; letter-spacing: 2px;">Gas PPM</div>
-        <div class="alert-bar" id="alertBar">⚠️ Gas Leakage Detected! Take immediate action.</div>
-    </div>
-
-    <!-- Gauge Panel -->
-    <div class="panel">
-        <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem; text-align:center;">Risk Capacity Gauge</h2>
-        <div class="gauge-container">
-            <canvas id="gaugeChart"></canvas>
-            <div id="gaugePercent" style="position: absolute; font-family: 'Orbitron'; font-size: 2rem; font-weight: bold; color: #fff;">10%</div>
-        </div>
-    </div>
-
-    <!-- Environment Panel -->
-    <div class="panel">
-        <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem; text-align:center;">Local Environment</h2>
-        <div style="display:flex; justify-content: space-around;">
-            <div class="metric-block">
-                <div class="metric-title">Temperature</div>
-                <div class="metric-val" id="tempDisplay">22.0°C</div>
-            </div>
-            <div class="metric-block">
-                <div class="metric-title">Humidity</div>
-                <div class="metric-val" id="humDisplay">45.0%</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- System Telemetry Panel -->
-    <div class="panel">
-        <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem; text-align:center;">Telemetry Status</h2>
-        <ul style="list-style: none; padding: 0; color: #ccc; line-height: 1.8;">
-            <li><strong>Uptime:</strong> <span id="uptimeDisp" style="color:#0f0">00:00:00</span></li>
-            <li><strong>Latency:</strong> <span id="latencyDisp" style="color:#0f0">12 ms</span></li>
-            <li><strong>Node ID:</strong> <span style="font-family:monospace; color:#88f">SNSR-X92-ALFA</span></li>
-            <li><strong>Battery:</strong> <span style="color:#0f0">98% (AC Power)</span></li>
-        </ul>
-    </div>
-
-    <!-- Alarm History Panel -->
-    <div class="panel" style="grid-column: span 2;">
-        <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem;">Alert Timeline Log</h2>
-        <ul class="history-list" id="historyList"></ul>
-    </div>
-
-    <!-- Live Chart Panel -->
-    <div class="panel chart-container-large">
-        <h2 style="margin-top:0; color:#00ffff; font-family:'Orbitron'; font-size:1.2rem;">Live Sensor Data Stream (PPM)</h2>
-        <div style="height: 240px;"><canvas id="gasChart"></canvas></div>
-    </div>
-
-    <!-- Navigation Link -->
-    <div style="grid-column: 1 / -1; text-align: center; margin-top: 20px; margin-bottom: 20px;">
-        <button class="startup-btn" onclick="window.open('controller.html', '_blank')" style="font-size: 1.1rem; padding: 10px 25px;">Open Control Panel 🎛️</button>
-    </div>
-
-</div>
-
-<script>
-    // --- Audio System Context ---
-    let audioCtx = null;
-    let oscillator = null;
-    let gainNode = null;
-    let isBeeping = false;
-
-    function initializeAudio() {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioCtx = new AudioContext();
-        oscillator = audioCtx.createOscillator();
-        oscillator.type = 'square';
-        oscillator.frequency.value = 800; 
-        gainNode = audioCtx.createGain(); gainNode.gain.value = 0; 
-        oscillator.connect(gainNode); gainNode.connect(audioCtx.destination);
-        oscillator.start();
-    }
-
-    function toggleBuzzer(active) {
-        if(!audioCtx) return;
-        if(active && !isBeeping) {
-            gainNode.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            let lfo = audioCtx.createOscillator(); lfo.type = 'square'; lfo.frequency.value = 4;
-            let lfoGain = audioCtx.createGain(); lfoGain.gain.value = 0.5;
-            lfo.connect(lfoGain); lfoGain.connect(gainNode.gain);
-            lfo.start(); isBeeping = true; oscillator.lfo = lfo;
-        } else if (!active && isBeeping) {
-            gainNode.gain.setValueAtTime(0, audioCtx.currentTime);
-            if(oscillator.lfo) { oscillator.lfo.stop(); oscillator.lfo.disconnect(); oscillator.lfo = null; }
-            isBeeping = false;
-        }
-    }
-
-    // --- Line Chart ---
-    const ctxLine = document.getElementById('gasChart').getContext('2d');
-    const gasChart = new Chart(ctxLine, {
-        type: 'line',
-        data: { labels: Array(30).fill(''), datasets: [{ label: 'Gas Concentration', data: Array(30).fill(0), borderColor: '#00ffff', backgroundColor: 'rgba(0, 255, 255, 0.1)', borderWidth: 2, fill: true, tension: 0.3, pointRadius: 1 }] },
-        options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 1000 }, x: { display: false } }, plugins: { legend: { display: false } } }
-    });
-
-    // --- Gauge Chart ---
-    const ctxGauge = document.getElementById('gaugeChart').getContext('2d');
-    const gaugeChart = new Chart(ctxGauge, {
-        type: 'doughnut',
-        data: { datasets: [{ data: [100, 900], backgroundColor: ['#00ff00', '#222'], borderWidth: 0 }] },
-        options: { responsive: true, maintainAspectRatio: false, cutout: '80%', plugins: { tooltip: {enabled: false} } }
-    });
-
-    // --- Uptime Simulator ---
-    let uptimeSeconds = 0;
-    setInterval(() => {
-        uptimeSeconds++;
-        const h = String(Math.floor(uptimeSeconds / 3600)).padStart(2, '0');
-        const m = String(Math.floor((uptimeSeconds % 3600) / 60)).padStart(2, '0');
-        const s = String(uptimeSeconds % 60).padStart(2, '0');
-        document.getElementById('uptimeDisp').innerText = `${Math.floor(Math.random() * 24 + 120)}:${m}:${s}`; // fake start hours
-
-        // Randomly adjust latency display
-        const lat = Math.floor(Math.random() * 15 + 10);
-        const latEl = document.getElementById('latencyDisp');
-        latEl.innerText = `${lat} ms`;
-        latEl.style.color = lat > 20 ? '#ff0' : '#0f0';
-    }, 1000);
-
-    // --- Logic ---
-    function initializeSystem() {
-        document.getElementById('startupOverlay').style.display = 'none';
-        initializeAudio();
-        const dataStr = localStorage.getItem('gasSystemData');
-        if(dataStr) handleNewData(JSON.parse(dataStr));
-    }
-
-    function addHistoryItem(msg, level) {
-        const list = document.getElementById('historyList');
-        const li = document.createElement('li'); li.className = level;
-        li.innerHTML = `<span class="time">[${new Date().toLocaleTimeString()}]</span> <span class="msg">${msg}</span>`;
-        list.prepend(li);
-        if(list.children.length > 50) list.removeChild(list.lastChild);
-    }
-
-    let lastState = 'safe';
-
-    function handleNewData(data) {
-        const val = Math.round(data.value);
-        document.getElementById('gasValueDisplay').innerText = val;
-        
-        if (data.temp) document.getElementById('tempDisplay').innerText = `${data.temp}°C`;
-        if (data.humidity) document.getElementById('humDisplay').innerText = `${data.humidity}%`;
-
-        const panel = document.getElementById('monitorPanel');
-        let currentState = val < 200 ? 'safe' : (val < 400 ? 'warn' : 'danger');
-
-        panel.className = 'panel primary-data state-' + currentState;
-
-        // Update Gauge
-        let percent = Math.min((val / 1000) * 100, 100).toFixed(0);
-        document.getElementById('gaugePercent').innerText = `${percent}%`;
-        let gaugeColor = currentState === 'safe' ? '#0f0' : (currentState === 'warn' ? '#ff0' : '#f00');
-        gaugeChart.data.datasets[0].data = [val, 1000 - val];
-        gaugeChart.data.datasets[0].backgroundColor[0] = gaugeColor;
-        gaugeChart.update();
-
-        if (currentState === 'danger') {
-            document.body.classList.add('pulse-danger');
-            document.getElementById('alertBar').classList.add('active');
-            document.getElementById('statusText').innerText = 'DANGER: CRITICAL LEVEL';
-            toggleBuzzer(true);
-            gasChart.data.datasets[0].borderColor = '#ff0000';
-            gasChart.data.datasets[0].backgroundColor = 'rgba(255,0,0,0.1)';
-            if(lastState !== 'danger') addHistoryItem(`Gas leak! Peak Value Confirmed: ${val} PPM`, 'danger');
-        } 
-        else if (currentState === 'warn') {
-            document.body.classList.remove('pulse-danger');
-            document.getElementById('alertBar').classList.remove('active');
-            document.getElementById('statusText').innerText = 'WARNING: ELEVATED';
-            toggleBuzzer(false);
-            gasChart.data.datasets[0].borderColor = '#ffff00';
-            gasChart.data.datasets[0].backgroundColor = 'rgba(255,255,0,0.1)';
-            if(lastState !== 'warn') addHistoryItem(`Elevated anomalies! Value: ${val} PPM`, 'warn');
-        }
-        else {
-            document.body.classList.remove('pulse-danger');
-            document.getElementById('alertBar').classList.remove('active');
-            document.getElementById('statusText').innerText = 'SYSTEM SAFE';
-            toggleBuzzer(false);
-            gasChart.data.datasets[0].borderColor = '#00ffff';
-            gasChart.data.datasets[0].backgroundColor = 'rgba(0,255,255,0.1)';
+        :root {
+            --bg: #050508;
+            --panel: rgba(10, 20, 35, 0.85);
+            --cyan: #00ffff;
+            --green: #00ff00;
+            --yellow: #ffff00;
+            --red: #ff0000;
+            --text: #d0e0ff;
+            --dim: #445566;
         }
 
-        lastState = currentState;
-        const d = gasChart.data.datasets[0].data; d.push(val); d.shift(); gasChart.update();
-    }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    window.addEventListener('storage', (e) => {
-        if(e.key === 'gasSystemData' && e.newValue) handleNewData(JSON.parse(e.newValue));
-    });
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Rajdhani', sans-serif;
+            min-height: 100vh;
+            padding: 20px;
+        }
 
-    // MQTT Implementation
-    const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
-    const mqttTopic = 'iot_proj_gas_system_sync_8f92a3';
+        /* Header */
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(0, 255, 255, 0.1);
+        }
 
-    mqttClient.on('connect', () => {
-        console.log('Display connected to MQTT broker');
-        mqttClient.subscribe(mqttTopic);
-    });
+        .header h1 {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--cyan);
+            font-size: 2rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+        }
 
-    mqttClient.on('message', (topic, message) => {
-        if (topic === mqttTopic) {
-            try {
-                handleNewData(JSON.parse(message.toString()));
-            } catch (err) {
-                console.error("Failed to parse MQTT message", err);
+        .header .subtitle {
+            color: #88aadd;
+            font-size: 1rem;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+
+        /* Layout */
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid rgba(0, 255, 255, 0.12);
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            position: relative;
+        }
+
+        .panel::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--cyan);
+            border-radius: 15px 0 0 15px;
+        }
+
+        .panel-title {
+            font-family: 'Orbitron', sans-serif;
+            color: var(--cyan);
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-title .icon {
+            font-size: 1.2rem;
+        }
+
+        /* Sliders */
+        .control-row {
+            margin-bottom: 22px;
+        }
+
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .control-label .val-display {
+            font-family: 'Orbitron';
+            color: var(--cyan);
+            font-size: 1rem;
+        }
+
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1a2a3a;
+            outline: none;
+            cursor: pointer;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: var(--cyan);
+            box-shadow: 0 0 8px var(--cyan);
+            cursor: pointer;
+        }
+
+        input[type="range"].gas-slider::-webkit-slider-thumb {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+        }
+
+        input[type="range"].temp-slider::-webkit-slider-thumb {
+            background: #ff8800;
+            box-shadow: 0 0 8px #ff8800;
+        }
+
+        input[type="range"].hum-slider::-webkit-slider-thumb {
+            background: #0099ff;
+            box-shadow: 0 0 8px #0099ff;
+        }
+
+        /* Range track coloring */
+        .range-track {
+            position: relative;
+        }
+
+        .range-fill {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 6px;
+            border-radius: 3px;
+            pointer-events: none;
+            transition: width 0.1s, background 0.3s;
+        }
+
+        /* Current gas level indicator */
+        .gas-indicator {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+            margin-bottom: 20px;
+            border: 1px solid rgba(0, 255, 255, 0.1);
+        }
+
+        .gas-big {
+            font-family: 'Orbitron';
+            font-size: 3.5rem;
+            font-weight: 900;
+            line-height: 1;
+            transition: color 0.3s, text-shadow 0.3s;
+        }
+
+        .gas-unit {
+            color: #556;
+            font-size: 0.9rem;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        .gas-state-badge {
+            display: inline-block;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-family: 'Orbitron';
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-top: 10px;
+            transition: all 0.3s;
+        }
+
+        /* Buttons */
+        .btn-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px 10px;
+            border-radius: 8px;
+            border: 1px solid;
+            font-family: 'Orbitron';
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: transparent;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-safe {
+            color: var(--green);
+            border-color: var(--green);
+        }
+
+        .btn-safe:hover {
+            background: rgba(0, 255, 0, 0.12);
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.3);
+        }
+
+        .btn-warn {
+            color: var(--yellow);
+            border-color: var(--yellow);
+        }
+
+        .btn-warn:hover {
+            background: rgba(255, 255, 0, 0.12);
+            box-shadow: 0 0 15px rgba(255, 255, 0, 0.3);
+        }
+
+        .btn-danger {
+            color: var(--red);
+            border-color: var(--red);
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 0, 0, 0.12);
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.3);
+        }
+
+        .btn-cyan {
+            color: var(--cyan);
+            border-color: var(--cyan);
+        }
+
+        .btn-cyan:hover {
+            background: rgba(0, 255, 255, 0.12);
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+        }
+
+        .btn-orange {
+            color: #ff8800;
+            border-color: #ff8800;
+        }
+
+        .btn-orange:hover {
+            background: rgba(255, 136, 0, 0.12);
+            box-shadow: 0 0 15px rgba(255, 136, 0, 0.3);
+        }
+
+        /* Send button */
+        .send-btn {
+            width: 100%;
+            padding: 16px;
+            background: transparent;
+            border: 2px solid var(--cyan);
+            color: var(--cyan);
+            font-family: 'Orbitron';
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .send-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 255, 0.15), transparent);
+            transition: left 0.4s;
+        }
+
+        .send-btn:hover::before {
+            left: 100%;
+        }
+
+        .send-btn:hover {
+            background: rgba(0, 255, 255, 0.1);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        }
+
+        .send-btn:active {
+            transform: scale(0.98);
+        }
+
+        .send-btn.flash {
+            background: rgba(0, 255, 255, 0.25);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.5);
+        }
+
+        /* Auto mode */
+        .toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid #223;
+            margin-bottom: 15px;
+        }
+
+        .toggle-label {
+            font-size: 1rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 26px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            display: none;
+        }
+
+        .toggle-track {
+            position: absolute;
+            inset: 0;
+            background: #1a2a3a;
+            border-radius: 13px;
+            border: 1px solid #334;
+            transition: background 0.3s;
+        }
+
+        .toggle-thumb {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #556;
+            transition: all 0.3s;
+        }
+
+        input:checked+.toggle-track {
+            background: rgba(0, 255, 255, 0.2);
+            border-color: var(--cyan);
+        }
+
+        input:checked~.toggle-thumb {
+            left: 27px;
+            background: var(--cyan);
+            box-shadow: 0 0 8px var(--cyan);
+        }
+
+        /* Send log */
+        .send-log {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 180px;
+            overflow-y: auto;
+        }
+
+        .send-log li {
+            padding: 7px 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            font-size: 0.88rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .send-log .log-time {
+            color: #445566;
+            font-size: 0.8rem;
+        }
+
+        .send-log .log-val {
+            font-family: 'Orbitron';
+            font-size: 0.85rem;
+        }
+
+        .log-safe {
+            color: var(--green);
+        }
+
+        .log-warn {
+            color: var(--yellow);
+        }
+
+        .log-danger {
+            color: var(--red);
+        }
+
+        /* MQTT status */
+        .mqtt-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid #223;
+            margin-bottom: 15px;
+            font-size: 0.9rem;
+        }
+
+        .mqtt-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.3s;
+        }
+
+        .mqtt-dot.connected {
+            background: var(--green);
+            box-shadow: 0 0 8px var(--green);
+        }
+
+        .mqtt-dot.error {
+            background: var(--red);
+        }
+
+        .mqtt-label {
+            font-family: 'Orbitron';
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+        }
+
+        /* Stats row */
+        .stats-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-block {
+            flex: 1;
+            text-align: center;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            border: 1px solid #223;
+        }
+
+        .stat-title {
+            font-size: 0.75rem;
+            color: #88aadd;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .stat-val {
+            font-family: 'Orbitron';
+            font-size: 1.2rem;
+            color: #fff;
+            margin-top: 3px;
+        }
+
+        /* Back button */
+        .back-btn {
+            position: fixed;
+            bottom: 15px;
+            right: 15px;
+            background: rgba(0, 255, 255, 0.05);
+            border: 1px solid rgba(0, 255, 255, 0.15);
+            color: rgba(0, 255, 255, 0.4);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 8px;
+            z-index: 50;
+            transition: all 0.2s;
+            font-family: 'Orbitron';
+            letter-spacing: 1px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .back-btn:hover {
+            background: rgba(0, 255, 255, 0.15);
+            color: rgba(0, 255, 255, 0.8);
+            border-color: rgba(0, 255, 255, 0.4);
+        }
+
+        .back-btn span {
+            font-size: 0.65rem;
+        }
+
+        .full-col {
+            grid-column: span 2;
+        }
+
+        @media (max-width: 750px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .full-col {
+                grid-column: span 1;
             }
         }
-    });
-</script>
+    </style>
+</head>
+
+<body>
+
+    <div class="header">
+        <h1>⚙️ System Controller</h1>
+        <div class="subtitle">Gas Safety — Command & Control Panel</div>
+    </div>
+
+    <div class="grid">
+
+        <!-- Gas Control Panel -->
+        <div class="panel">
+            <div class="panel-title"><span class="icon">🔬</span> Gas Level Control</div>
+
+            <div class="gas-indicator">
+                <div class="gas-big" id="gasDisplay">100</div>
+                <div class="gas-unit">PPM — Gas Concentration</div>
+                <div class="gas-state-badge" id="gasStateBadge">● SAFE</div>
+            </div>
+
+            <div class="control-row">
+                <div class="control-label">
+                    <span>Gas Value (PPM)</span>
+                    <span class="val-display" id="gasValLabel">100</span>
+                </div>
+                <input type="range" class="gas-slider" id="gasSlider" min="0" max="1000" value="100"
+                    oninput="updateGasSlider(this.value)">
+            </div>
+
+            <div class="panel-title" style="margin-top:5px; font-size:0.85rem;">Quick Presets</div>
+            <div class="btn-row">
+                <button class="btn btn-safe" onclick="setGas(50)">SAFE<br><small>50 ppm</small></button>
+                <button class="btn btn-warn" onclick="setGas(300)">WARN<br><small>300 ppm</small></button>
+                <button class="btn btn-danger" onclick="setGas(700)">DANGER<br><small>700 ppm</small></button>
+                <button class="btn btn-orange" onclick="setGas(999)">PEAK<br><small>999 ppm</small></button>
+            </div>
+        </div>
+
+        <!-- Environment Control -->
+        <div class="panel">
+            <div class="panel-title"><span class="icon">🌡️</span> Environment Controls</div>
+
+            <div class="control-row">
+                <div class="control-label">
+                    <span>Temperature</span>
+                    <span class="val-display" id="tempValLabel" style="color: #ff8800;">22.0°C</span>
+                </div>
+                <input type="range" class="temp-slider" id="tempSlider" min="10" max="60" value="22" step="0.5"
+                    oninput="updateTempSlider(this.value)">
+            </div>
+
+            <div class="control-row">
+                <div class="control-label">
+                    <span>Humidity</span>
+                    <span class="val-display" id="humValLabel" style="color: #0099ff;">45.0%</span>
+                </div>
+                <input type="range" class="hum-slider" id="humSlider" min="0" max="100" value="45" step="0.5"
+                    oninput="updateHumSlider(this.value)">
+            </div>
+
+            <div class="panel-title" style="margin-top: 5px; font-size:0.85rem;">Environment Presets</div>
+            <div class="btn-row">
+                <button class="btn btn-cyan" onclick="setEnv(22,45)">NORMAL</button>
+                <button class="btn btn-orange" onclick="setEnv(45,80)">HOT & HUMID</button>
+                <button class="btn btn-cyan" onclick="setEnv(10,20)">COLD & DRY</button>
+            </div>
+        </div>
+
+        <!-- Automation Panel -->
+        <div class="panel">
+            <div class="panel-title"><span class="icon">🤖</span> Automation</div>
+
+            <label class="toggle-row" for="autoToggle" style="cursor:pointer;">
+                <span class="toggle-label">Auto Simulation Mode</span>
+                <div class="toggle-switch">
+                    <input type="checkbox" id="autoToggle" onchange="toggleAutoMode(this.checked)">
+                    <div class="toggle-track"></div>
+                    <div class="toggle-thumb"></div>
+                </div>
+            </label>
+
+            <div class="control-row">
+                <div class="control-label">
+                    <span>Auto Send Interval</span>
+                    <span class="val-display" id="intervalLabel">2s</span>
+                </div>
+                <input type="range" id="intervalSlider" min="1" max="10" value="2" oninput="updateInterval(this.value)">
+            </div>
+
+            <div class="btn-row">
+                <button class="btn btn-cyan" onclick="runScenario('gradual')">📈 Gradual Rise</button>
+                <button class="btn btn-danger" onclick="runScenario('spike')">⚡ Spike Test</button>
+                <button class="btn btn-safe" onclick="runScenario('drop')">📉 Gradual Drop</button>
+            </div>
+        </div>
+
+        <!-- MQTT & Send Panel -->
+        <div class="panel">
+            <div class="panel-title"><span class="icon">📡</span> Publish & Status</div>
+
+            <div class="mqtt-bar">
+                <div class="mqtt-dot" id="mqttDot"></div>
+                <span class="mqtt-label" id="mqttLabel">CONNECTING TO BROKER...</span>
+            </div>
+
+            <div class="stats-row">
+                <div class="stat-block">
+                    <div class="stat-title">Sent</div>
+                    <div class="stat-val" id="sentCount">0</div>
+                </div>
+                <div class="stat-block">
+                    <div class="stat-title">Last Sent</div>
+                    <div class="stat-val" id="lastSent" style="font-size:0.85rem;">—</div>
+                </div>
+                <div class="stat-block">
+                    <div class="stat-title">Topic</div>
+                    <div class="stat-val" style="font-size:0.6rem; color:#88aadd; word-break:break-all;">gas_sync</div>
+                </div>
+            </div>
+
+            <button class="send-btn" id="sendBtn" onclick="sendNow()">▶ SEND TO DISPLAY</button>
+        </div>
+
+        <!-- Send Log -->
+        <div class="panel full-col">
+            <div class="panel-title"><span class="icon">📋</span> Transmission Log</div>
+            <ul class="send-log" id="sendLog">
+                <li style="color:#334; font-style:italic; font-size:0.85rem;">No transmissions yet...</li>
+            </ul>
+        </div>
+
+    </div>
+
+    <!-- Back to Display -->
+    <a class="back-btn" href="display.html" title="Back to Dashboard">
+        📊 <span>DISPLAY</span>
+    </a>
+
+    <script>
+        // State
+        let gasVal = 100, tempVal = 22, humVal = 45;
+        let autoMode = false, autoInterval = null, autoSendInterval = 2000;
+        let sentCount = 0;
+        let scenarioRunning = false;
+
+        // MQTT
+        const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+        const mqttTopic = 'iot_proj_gas_system_sync_8f92a3';
+        let mqttReady = false;
+
+        mqttClient.on('connect', () => {
+            mqttReady = true;
+            document.getElementById('mqttDot').className = 'mqtt-dot connected';
+            document.getElementById('mqttLabel').innerText = 'CONNECTED — broker.emqx.io';
+        });
+
+        mqttClient.on('error', () => {
+            document.getElementById('mqttDot').className = 'mqtt-dot error';
+            document.getElementById('mqttLabel').innerText = 'CONNECTION ERROR';
+        });
+
+        mqttClient.on('offline', () => {
+            mqttReady = false;
+            document.getElementById('mqttDot').className = 'mqtt-dot error';
+            document.getElementById('mqttLabel').innerText = 'OFFLINE';
+        });
+
+        // Slider updates
+        function updateGasSlider(v) {
+            gasVal = parseFloat(v);
+            document.getElementById('gasValLabel').innerText = Math.round(gasVal);
+            document.getElementById('gasDisplay').innerText = Math.round(gasVal);
+            updateGasIndicator();
+        }
+
+        function updateTempSlider(v) {
+            tempVal = parseFloat(v);
+            document.getElementById('tempValLabel').innerText = `${tempVal.toFixed(1)}°C`;
+        }
+
+        function updateHumSlider(v) {
+            humVal = parseFloat(v);
+            document.getElementById('humValLabel').innerText = `${humVal.toFixed(1)}%`;
+        }
+
+        function updateInterval(v) {
+            autoSendInterval = v * 1000;
+            document.getElementById('intervalLabel').innerText = `${v}s`;
+            if (autoMode) {
+                clearInterval(autoInterval);
+                autoInterval = setInterval(sendNow, autoSendInterval);
+            }
+        }
+
+        function updateGasIndicator() {
+            const display = document.getElementById('gasDisplay');
+            const badge = document.getElementById('gasStateBadge');
+            if (gasVal < 200) {
+                display.style.color = '#00ff00';
+                display.style.textShadow = '0 0 30px rgba(0,255,0,0.7)';
+                badge.style.background = 'rgba(0,255,0,0.1)';
+                badge.style.color = '#00ff00';
+                badge.style.border = '1px solid rgba(0,255,0,0.3)';
+                badge.innerText = '● SAFE';
+            } else if (gasVal < 400) {
+                display.style.color = '#ffff00';
+                display.style.textShadow = '0 0 30px rgba(255,255,0,0.7)';
+                badge.style.background = 'rgba(255,255,0,0.1)';
+                badge.style.color = '#ffff00';
+                badge.style.border = '1px solid rgba(255,255,0,0.3)';
+                badge.innerText = '⚠ WARNING';
+            } else {
+                display.style.color = '#ff0000';
+                display.style.textShadow = '0 0 40px rgba(255,0,0,0.9)';
+                badge.style.background = 'rgba(255,0,0,0.1)';
+                badge.style.color = '#ff0000';
+                badge.style.border = '1px solid rgba(255,0,0,0.3)';
+                badge.innerText = '🚨 DANGER';
+            }
+        }
+
+        // Preset setters
+        function setGas(v) {
+            gasVal = v;
+            document.getElementById('gasSlider').value = v;
+            updateGasSlider(v);
+        }
+
+        function setEnv(t, h) {
+            tempVal = t; humVal = h;
+            document.getElementById('tempSlider').value = t;
+            document.getElementById('humSlider').value = h;
+            updateTempSlider(t); updateHumSlider(h);
+        }
+
+        // Send data
+        function buildPayload() {
+            return {
+                value: gasVal,
+                temp: tempVal.toFixed(1),
+                humidity: humVal.toFixed(1),
+                timestamp: Date.now()
+            };
+        }
+
+        function sendNow() {
+            const payload = buildPayload();
+            const payloadStr = JSON.stringify(payload);
+
+            // localStorage (same browser tabs)
+            localStorage.setItem('gasSystemData', payloadStr);
+
+            // MQTT (cross-device)
+            if (mqttReady) {
+                mqttClient.publish(mqttTopic, payloadStr);
+            }
+
+            sentCount++;
+            document.getElementById('sentCount').innerText = sentCount;
+            document.getElementById('lastSent').innerText = new Date().toLocaleTimeString();
+
+            // Flash send button
+            const btn = document.getElementById('sendBtn');
+            btn.classList.add('flash');
+            setTimeout(() => btn.classList.remove('flash'), 300);
+
+            // Log entry
+            addLog(payload);
+        }
+
+        function addLog(payload) {
+            const log = document.getElementById('sendLog');
+            // Remove placeholder if present
+            if (log.children.length === 1 && log.children[0].style.color === 'rgb(51, 51, 68)') {
+                log.innerHTML = '';
+            }
+            const val = Math.round(payload.value);
+            const state = val < 200 ? 'safe' : (val < 400 ? 'warn' : 'danger');
+            const li = document.createElement('li');
+            li.innerHTML = `
+            <span>
+                <span class="log-val log-${state}">${val} PPM</span>
+                &nbsp;·&nbsp; ${payload.temp}°C &nbsp;·&nbsp; ${payload.humidity}%
+            </span>
+            <span class="log-time">${new Date().toLocaleTimeString()}</span>
+        `;
+            log.prepend(li);
+            if (log.children.length > 40) log.removeChild(log.lastChild);
+        }
+
+        // Auto mode
+        function toggleAutoMode(active) {
+            autoMode = active;
+            if (active) {
+                autoInterval = setInterval(sendNow, autoSendInterval);
+            } else {
+                clearInterval(autoInterval);
+                autoInterval = null;
+            }
+        }
+
+        // Scenarios
+        function runScenario(type) {
+            if (scenarioRunning) return;
+            scenarioRunning = true;
+            let step = 0;
+
+            const scenarios = {
+                gradual: { steps: 20, fn: (i) => Math.min(100 + i * 45, 999) },
+                spike: { steps: 10, fn: (i) => i < 5 ? i * 200 : 999 - i * 100 },
+                drop: { steps: 20, fn: (i) => Math.max(800 - i * 40, 30) }
+            };
+
+            const s = scenarios[type];
+            const interval = setInterval(() => {
+                if (step >= s.steps) {
+                    clearInterval(interval);
+                    scenarioRunning = false;
+                    return;
+                }
+                setGas(Math.round(s.fn(step)));
+                sendNow();
+                step++;
+            }, 600);
+        }
+
+        // Init
+        updateGasIndicator();
+    </script>
 </body>
+
 </html>
